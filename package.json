@@ -6,7 +6,6 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "gen:types": "npx --yes supabase gen types typescript --project-id jccbooqdcugdnduurwhn > src/types/supabase.gen.ts && node scripts/clean-gen-types.mjs"
   },
