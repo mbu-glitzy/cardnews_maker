@@ -47,3 +47,7 @@ next-env.d.ts
 
 # Claude Code local state
 .claude/
+
+# Supabase CLI 로컬 임시 파일
+supabase/.temp/
+supabase/.branches/
