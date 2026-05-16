@@ -1,0 +1,57 @@
+# 개발 패턴 & 교훈
+
+> 같은 실수 2회 반복 금지. 매 수정/피드백 발생 시 즉시 누적.
+> 세션 시작 시 항상 먼저 검토.
+
+---
+
+## 2026-05-13 — Next.js 16 마이그레이션 변경점
+- **문제**: Next.js 16부터 `middleware.ts` 파일명이 deprecated. `proxy.ts`로 이름 변경 권장.
+- **원인**: Next.js 16의 새 컨벤션. 향후 버전에서 제거될 수 있음.
+- **해결**: 빌드는 통과하므로 일단 유지. UI/인증 작업 끝낸 후 한 번에 `src/middleware.ts` → `src/proxy.ts`로 리네임 + 내부 함수명/import 갱신.
+- **규칙**: Next.js 17 이전에 정리. 신규 작성 시에는 처음부터 `proxy.ts` 사용 고려.
+
+## 2026-05-13 — Supabase ssr 쿠키 콜백 타입 추론
+- **문제**: `@supabase/ssr` 의 `setAll` 콜백 파라미터 `cookiesToSet` 가 strict 모드에서 implicit any 로 잡힘.
+- **원인**: 콜백 시그니처 타입 추론이 강타입에서 실패.
+- **해결**: `import { type CookieOptions } from "@supabase/ssr"` 후 명시적 타입 `{ name: string; value: string; options: CookieOptions }[]` 적용.
+- **규칙**: Supabase ssr 콜백은 모든 곳에서 명시적 타입 사용. 추론 의존 금지.
+
+## 2026-05-13 — `supabase gen types` 결과에 메타데이터 혼입
+- **문제**: `npx supabase gen types typescript ...` 출력 끝에 `<claude-code-hint ... />` HTML 태그가 붙음. TS 파일이 깨짐.
+- **원인**: Claude Code 환경의 supabase 플러그인이 응답 끝에 메타데이터를 주입.
+- **해결**: `scripts/clean-gen-types.mjs` 후처리로 정규식 제거. `npm run gen:types` 스크립트에 체이닝.
+- **규칙**: gen types 직접 실행 금지. 반드시 `npm run gen:types` 사용. 새 환경에서 같은 문제 다시 만나면 정규식 패턴(`<claude-code-hint\b[^>]*\/>`) 확인.
+
+## 2026-05-13 — Supabase 자동 생성 타입과 코드 분리 패턴
+- **문제**: gen types 결과에는 enum이 `Database["public"]["Enums"]["..."]` 형태로만 노출돼, `AiOperation` 같은 짧은 alias를 직접 export 못 함. supabase.ts에 alias 추가하면 다음 gen types 실행 시 사라짐.
+- **원인**: 자동 생성 파일 = 빌드 산출물. 수동 편집 불가.
+- **해결**: wrapper 패턴 — `supabase.gen.ts` (자동 생성, 절대 수동 편집 안 함) + `supabase.ts` (수동 wrapper, re-export + alias 정의). 사용처는 항상 `@/types/supabase` import.
+- **규칙**: 자동 생성 파일은 별도 `.gen.ts` 접미사로 분리. 사용처는 wrapper만 본다.
+
+## 2026-05-13 — `@supabase/ssr` ↔ `@supabase/supabase-js` 버전 불일치가 타입 추론 전면 붕괴 (핵심)
+- **문제**: `.update({...})` → `never`, `.maybeSingle()` → `never[]` 등 supabase-js 호출 결과가 전부 `never` 로 추론.
+- **원인**: `@supabase/ssr@0.5.x` 가 `@supabase/supabase-js/dist/module/lib/types` 경로를 import 하는데, supabase-js 최신 버전(2.4x+)에서 그 경로가 사라짐. ssr의 .d.ts 가 모듈을 못 찾아 client 의 schema generic forwarding 이 깨짐 → 모든 row/insert/update 타입이 fallback.
+- **해결**: `npm install @supabase/ssr@latest` (0.10.x). 한 줄로 전부 해결.
+- **규칙**: supabase-js 또는 ssr 업그레이드 시 둘 다 같이 업그레이드. 한쪽만 올리지 말 것. 의심 증상: 일부는 동작하고 update/insert만 never 로 추론 → 거의 100% 버전 mismatch.
+- **검증 trick**: `npx tsc --noEmit some-test.ts` 식으로 임시 파일에 inline 호출을 만들어 보면 `Cannot find module '@supabase/supabase-js/dist/module/lib/types'` 같은 명시적 에러가 노출됨 (실제 사용처에서는 묻혀버림).
+
+## 2026-05-13 — supabase-js `select("...")` 타입 추론 실패 → `.returns<T>()`
+- **문제**: `supabase.from("projects").select("id, topic, status, ...")` 결과 `data` 가 `never[]` 로 추론. 필드 접근 시 TS2339.
+- **원인**: supabase-js의 select 문자열 리터럴 파서가 우리 Database wrapper 타입 또는 Next 16 환경에서 추론 실패.
+- **해결**: `.returns<RowShape[]>()` 체이닝으로 응답 타입 명시. shape 타입은 `Row<"projects">` + `Pick<...>` 로 정의.
+- **규칙**: select 문자열로 부분 컬럼 조회 시 반드시 `.returns<T>()` 또는 `select("*")` 사용. 절대 추론에만 의존 금지.
+
+## 2026-05-13 — SQL 예약어 컬럼명 (`order`) → PostgREST 정렬 표현식 충돌
+- **문제**: `cards.order` 컬럼에 대한 `.eq("order", N)` 호출이 동작하지 않음. update 시 WHERE 절이 무시돼 모든 행이 동일 값으로 덮어써졌고, 저장 직접 호출도 실패. "저장 실패" / "비어있는 카드가 있습니다" 증상.
+- **원인**: PostgREST의 `order` 쿼리 파라미터가 **정렬 표현식 전용 예약어**. supabase-js 의 `.eq("order", N)` 가 `?order=eq.N` 으로 보내지면 정렬로 잘못 해석됨. `.select('"order"', ...)` 따옴표 escape 도 PostgREST 가 식별자 quote 로 받아 컬럼을 못 찾음.
+- **해결**: 컬럼 rename `cards.order` → `cards.card_order` (마이그레이션 1줄). 모든 코드의 `.eq("order")` / `.order("order")` / `select("\"order\"")` 일괄 변경. client side 객체에서 `.order` 사용을 유지하고 싶으면 select 에 alias 사용 (`order:card_order`).
+- **규칙**: 컬럼명을 정할 때 **SQL 예약어 + PostgREST 예약 쿼리 파라미터 (`select`/`order`/`limit`/`offset`/`columns`) 와 같은 이름 사용 금지**. 신규 스키마 작성 시 `card_order`, `display_order`, `position` 등 충돌 없는 이름.
+
+## 2026-05-13 — `.env.local.example` 보안 규칙
+- **문제**: 사용자가 실제 API 키를 `.env.local.example` 에 입력 → git 커밋 위험.
+- **원인**: `.gitignore` 에서 `!.env.local.example` 로 의도적 제외돼 있음 (포맷 공유 목적).
+- **해결**: 실제 키는 `.env.local` 에만 입력. `.env.local.example` 은 placeholder 유지.
+- **규칙**: 키 관련 작업 시 항상 `.env.local` 인지 `.env.local.example` 인지 명확히 안내. placeholder 복원 패턴 숙지.
+
+---

@@ -1,0 +1,318 @@
+/**
+ * Instagram Graph API 호출 헬퍼.
+ * 모든 호출은 fetch 기반. Node 런타임 + Edge 런타임 둘 다 동작.
+ */
+
+const API_VERSION = process.env.META_GRAPH_API_VERSION ?? "v23.0";
+const GRAPH_BASE = `https://graph.facebook.com/${API_VERSION}`;
+const OAUTH_BASE = `https://www.facebook.com/${API_VERSION}/dialog/oauth`;
+
+export const REQUIRED_SCOPES = [
+  "instagram_basic",
+  "instagram_content_publish",
+  "pages_show_list",
+  "pages_read_engagement",
+  "business_management",
+];
+
+export function buildAuthUrl(params: {
+  appId: string;
+  redirectUri: string;
+  state: string;
+}): string {
+  const u = new URL(OAUTH_BASE);
+  u.searchParams.set("client_id", params.appId);
+  u.searchParams.set("redirect_uri", params.redirectUri);
+  u.searchParams.set("scope", REQUIRED_SCOPES.join(","));
+  u.searchParams.set("response_type", "code");
+  u.searchParams.set("state", params.state);
+  return u.toString();
+}
+
+interface ShortTokenResp {
+  access_token: string;
+  token_type: string;
+  expires_in?: number;
+}
+
+/**
+ * OAuth code → short-lived access_token
+ */
+export async function exchangeCodeForToken(params: {
+  appId: string;
+  appSecret: string;
+  redirectUri: string;
+  code: string;
+}): Promise<ShortTokenResp> {
+  const u = new URL(`${GRAPH_BASE}/oauth/access_token`);
+  u.searchParams.set("client_id", params.appId);
+  u.searchParams.set("client_secret", params.appSecret);
+  u.searchParams.set("redirect_uri", params.redirectUri);
+  u.searchParams.set("code", params.code);
+
+  const res = await fetch(u.toString());
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`code 교환 실패 (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
+/**
+ * short-lived → long-lived (60일)
+ */
+export async function exchangeForLongLivedToken(params: {
+  appId: string;
+  appSecret: string;
+  shortToken: string;
+}): Promise<{ access_token: string; expires_in: number }> {
+  const u = new URL(`${GRAPH_BASE}/oauth/access_token`);
+  u.searchParams.set("grant_type", "fb_exchange_token");
+  u.searchParams.set("client_id", params.appId);
+  u.searchParams.set("client_secret", params.appSecret);
+  u.searchParams.set("fb_exchange_token", params.shortToken);
+
+  const res = await fetch(u.toString());
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`long-lived 변환 실패 (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
+interface PageNode {
+  id: string;
+  name: string;
+  access_token: string;
+  instagram_business_account?: { id: string };
+}
+
+/**
+ * 사용자 토큰으로 접근 가능한 페이지 목록 + 각 페이지의 IG 비즈 계정 ID.
+ */
+export async function listUserPagesWithIg(
+  userAccessToken: string
+): Promise<PageNode[]> {
+  const u = new URL(`${GRAPH_BASE}/me/accounts`);
+  u.searchParams.set(
+    "fields",
+    "id,name,access_token,instagram_business_account"
+  );
+  u.searchParams.set("access_token", userAccessToken);
+
+  const res = await fetch(u.toString());
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`페이지 목록 조회 실패 (${res.status}): ${text}`);
+  }
+  const data = (await res.json()) as { data: PageNode[] };
+  return data.data ?? [];
+}
+
+/**
+ * IG Business Account 기본 정보 (username 등).
+ */
+export async function getIgAccountInfo(
+  igUserId: string,
+  pageAccessToken: string
+): Promise<{ id: string; username: string }> {
+  const u = new URL(`${GRAPH_BASE}/${igUserId}`);
+  u.searchParams.set("fields", "id,username");
+  u.searchParams.set("access_token", pageAccessToken);
+
+  const res = await fetch(u.toString());
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`IG 계정 정보 조회 실패 (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
+/**
+ * 자식 컨테이너 (캐러셀 아이템) 생성. is_carousel_item=true.
+ */
+export async function createChildContainer(params: {
+  igUserId: string;
+  pageAccessToken: string;
+  imageUrl: string;
+}): Promise<string> {
+  const body = new URLSearchParams({
+    image_url: params.imageUrl,
+    is_carousel_item: "true",
+    access_token: params.pageAccessToken,
+  });
+  const res = await fetch(`${GRAPH_BASE}/${params.igUserId}/media`, {
+    method: "POST",
+    body,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`자식 컨테이너 생성 실패 (${res.status}): ${text}`);
+  }
+  const data = (await res.json()) as { id: string };
+  return data.id;
+}
+
+/**
+ * 부모 캐러셀 컨테이너 생성.
+ */
+export async function createCarouselContainer(params: {
+  igUserId: string;
+  pageAccessToken: string;
+  childIds: string[];
+  caption: string;
+}): Promise<string> {
+  const body = new URLSearchParams({
+    media_type: "CAROUSEL",
+    children: params.childIds.join(","),
+    caption: params.caption,
+    access_token: params.pageAccessToken,
+  });
+  const res = await fetch(`${GRAPH_BASE}/${params.igUserId}/media`, {
+    method: "POST",
+    body,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`캐러셀 컨테이너 생성 실패 (${res.status}): ${text}`);
+  }
+  const data = (await res.json()) as { id: string };
+  return data.id;
+}
+
+/**
+ * 컨테이너 상태 확인. FINISHED 가 되면 게시 가능.
+ */
+export async function getContainerStatus(
+  containerId: string,
+  pageAccessToken: string
+): Promise<string> {
+  const u = new URL(`${GRAPH_BASE}/${containerId}`);
+  u.searchParams.set("fields", "status_code");
+  u.searchParams.set("access_token", pageAccessToken);
+  const res = await fetch(u.toString());
+  if (!res.ok) return "ERROR";
+  const data = (await res.json()) as { status_code?: string };
+  return data.status_code ?? "UNKNOWN";
+}
+
+/**
+ * 컨테이너 발행 → 게시물 ID 반환.
+ */
+export async function publishMedia(params: {
+  igUserId: string;
+  pageAccessToken: string;
+  creationId: string;
+}): Promise<{ id: string }> {
+  const body = new URLSearchParams({
+    creation_id: params.creationId,
+    access_token: params.pageAccessToken,
+  });
+  const res = await fetch(`${GRAPH_BASE}/${params.igUserId}/media_publish`, {
+    method: "POST",
+    body,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`media_publish 실패 (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
+/**
+ * 게시물의 permalink 조회.
+ */
+export async function getMediaPermalink(
+  mediaId: string,
+  pageAccessToken: string
+): Promise<string | null> {
+  const u = new URL(`${GRAPH_BASE}/${mediaId}`);
+  u.searchParams.set("fields", "permalink");
+  u.searchParams.set("access_token", pageAccessToken);
+  const res = await fetch(u.toString());
+  if (!res.ok) return null;
+  const data = (await res.json()) as { permalink?: string };
+  return data.permalink ?? null;
+}
+
+/**
+ * 캐러셀 발행 한방 처리:
+ *  1) 각 이미지 자식 컨테이너 N개 생성 (병렬)
+ *  2) 컨테이너 처리 대기 (폴링)
+ *  3) 부모 캐러셀 컨테이너 생성
+ *  4) 부모 컨테이너 처리 대기
+ *  5) 발행
+ *  6) permalink 조회
+ */
+export async function publishCarousel(params: {
+  igUserId: string;
+  pageAccessToken: string;
+  imageUrls: string[];
+  caption: string;
+}): Promise<{ id: string; permalink: string | null }> {
+  if (params.imageUrls.length < 2 || params.imageUrls.length > 10) {
+    throw new Error("캐러셀은 2~10장이어야 합니다.");
+  }
+
+  // 1) 자식 컨테이너 병렬 생성
+  const childIds = await Promise.all(
+    params.imageUrls.map((url) =>
+      createChildContainer({
+        igUserId: params.igUserId,
+        pageAccessToken: params.pageAccessToken,
+        imageUrl: url,
+      })
+    )
+  );
+
+  // 2) 자식 컨테이너 처리 대기 (각각)
+  await Promise.all(
+    childIds.map((id) => waitForFinished(id, params.pageAccessToken))
+  );
+
+  // 3) 부모 캐러셀 컨테이너
+  const carouselId = await createCarouselContainer({
+    igUserId: params.igUserId,
+    pageAccessToken: params.pageAccessToken,
+    childIds,
+    caption: params.caption,
+  });
+
+  // 4) 부모 처리 대기
+  await waitForFinished(carouselId, params.pageAccessToken);
+
+  // 5) 발행
+  const published = await publishMedia({
+    igUserId: params.igUserId,
+    pageAccessToken: params.pageAccessToken,
+    creationId: carouselId,
+  });
+
+  // 6) permalink
+  const permalink = await getMediaPermalink(
+    published.id,
+    params.pageAccessToken
+  );
+
+  return { id: published.id, permalink };
+}
+
+async function waitForFinished(
+  containerId: string,
+  pageAccessToken: string,
+  opts: { maxWaitMs?: number; intervalMs?: number } = {}
+): Promise<void> {
+  const max = opts.maxWaitMs ?? 60_000;
+  const interval = opts.intervalMs ?? 2_000;
+  const start = Date.now();
+
+  while (Date.now() - start < max) {
+    const status = await getContainerStatus(containerId, pageAccessToken);
+    if (status === "FINISHED") return;
+    if (status === "ERROR" || status === "EXPIRED") {
+      throw new Error(`컨테이너 처리 실패: ${status}`);
+    }
+    await new Promise((r) => setTimeout(r, interval));
+  }
+  throw new Error("컨테이너 처리 시간 초과 (60초)");
+}

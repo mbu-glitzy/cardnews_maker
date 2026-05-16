@@ -1,0 +1,43 @@
+{
+  "name": "cardnews-maker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "gen:types": "npx --yes supabase gen types typescript --project-id jccbooqdcugdnduurwhn > src/types/supabase.gen.ts && node scripts/clean-gen-types.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.96.0",
+    "@google/genai": "^1.0.0",
+    "@hookform/resolvers": "^3.10.0",
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.47.10",
+    "@vercel/og": "^0.6.4",
+    "clsx": "^2.1.1",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.469.0",
+    "next": "^16.2.6",
+    "openai": "^4.77.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-hook-form": "^7.54.2",
+    "recharts": "^2.15.0",
+    "tailwind-merge": "^2.6.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.18.0",
+    "eslint-config-next": "^16.2.6",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3"
+  }
+}
