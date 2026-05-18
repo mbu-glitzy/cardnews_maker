@@ -174,6 +174,40 @@ export function aggregateByModel(rows: UsageRow[]): ModelSummary[] {
   return Array.from(map.values()).sort((a, b) => b.costUSD - a.costUSD);
 }
 
+export interface OperationBreakdown {
+  operation: string;
+  models: Array<{ model: string; calls: number; costUSD: number }>;
+  totalCalls: number;
+  totalCostUSD: number;
+}
+
+export function aggregateByOperation(rows: UsageRow[]): OperationBreakdown[] {
+  const map = new Map<string, Map<string, { calls: number; cost: number }>>();
+  for (const r of rows) {
+    const op = r.operation;
+    if (!map.has(op)) map.set(op, new Map());
+    const inner = map.get(op)!;
+    const e = inner.get(r.model) ?? { calls: 0, cost: 0 };
+    e.calls += 1;
+    e.cost += Number(r.cost_usd);
+    inner.set(r.model, e);
+  }
+  return Array.from(map.entries())
+    .map(([operation, inner]) => {
+      const models = Array.from(inner.entries())
+        .map(([model, agg]) => ({
+          model,
+          calls: agg.calls,
+          costUSD: agg.cost,
+        }))
+        .sort((a, b) => b.costUSD - a.costUSD);
+      const totalCalls = models.reduce((s, m) => s + m.calls, 0);
+      const totalCostUSD = models.reduce((s, m) => s + m.costUSD, 0);
+      return { operation, models, totalCalls, totalCostUSD };
+    })
+    .sort((a, b) => b.totalCostUSD - a.totalCostUSD);
+}
+
 export function aggregateDaily(rows: UsageRow[]): DailyPoint[] {
   const map = new Map<string, number>();
   for (const r of rows) {

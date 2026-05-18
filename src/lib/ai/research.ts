@@ -3,6 +3,9 @@ import { z } from "zod";
 import { requireUserApiKey } from "@/lib/ai/keys";
 import { logTextUsage } from "@/lib/usage";
 import { extractJson } from "@/lib/ai/_utils";
+import type { TextModelId } from "@/lib/pricing";
+
+const RESEARCH_ALLOWED: TextModelId[] = ["claude-opus-4-7", "claude-sonnet-4-6"];
 
 /**
  * 리서치 결과 JSON 스키마.
@@ -70,6 +73,7 @@ export interface RunResearchParams {
   projectId: string;
   topic: string;
   tone: string;
+  model?: TextModelId;
 }
 
 export async function runResearch(
@@ -78,8 +82,13 @@ export async function runResearch(
   const apiKey = await requireUserApiKey(params.userId, "anthropic");
   const client = new Anthropic({ apiKey });
 
+  const model: TextModelId =
+    params.model && RESEARCH_ALLOWED.includes(params.model)
+      ? params.model
+      : "claude-opus-4-7";
+
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model,
     max_tokens: 8192,
     system: SYSTEM_PROMPT,
     tools: [WEB_SEARCH_TOOL],
@@ -95,7 +104,7 @@ export async function runResearch(
   await logTextUsage({
     userId: params.userId,
     projectId: params.projectId,
-    model: "claude-opus-4-7",
+    model,
     operation: "research",
     inputTokens: response.usage.input_tokens,
     outputTokens: response.usage.output_tokens,

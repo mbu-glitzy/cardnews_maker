@@ -39,6 +39,8 @@ export default async function SettingsPage({
     default_engine: creds?.default_engine ?? "nano-banana-pro",
     default_tone: creds?.default_tone ?? "informative",
     default_card_count: creds?.default_card_count ?? 6,
+    research_model: creds?.research_model ?? "claude-opus-4-7",
+    planning_model: creds?.planning_model ?? "claude-opus-4-7",
   };
 
   return (

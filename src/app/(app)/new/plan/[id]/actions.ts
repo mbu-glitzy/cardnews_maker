@@ -47,6 +47,16 @@ export async function generatePlan(
   try {
     const { supabase, user, project, research } = await getContext(projectId);
 
+    const { data: cred } = await supabase
+      .from("api_credentials")
+      .select("planning_model")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const model =
+      cred?.planning_model === "claude-sonnet-4-6"
+        ? "claude-sonnet-4-6"
+        : "claude-opus-4-7";
+
     const plan = await runPlanning({
       userId: user.id,
       projectId: project.id,
@@ -54,6 +64,7 @@ export async function generatePlan(
       tone: project.tone,
       cardCount: project.card_count,
       research,
+      model,
     });
 
     const { error } = await supabase.from("plans").upsert(
@@ -100,6 +111,16 @@ export async function regenerateCardOutline(
       card_outline: planRow.card_outline as Plan["card_outline"],
     };
 
+    const { data: cred } = await supabase
+      .from("api_credentials")
+      .select("planning_model")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const model =
+      cred?.planning_model === "claude-sonnet-4-6"
+        ? "claude-sonnet-4-6"
+        : "claude-opus-4-7";
+
     const newCard = await runRegenerateCardOutline({
       userId: user.id,
       projectId: project.id,
@@ -108,6 +129,7 @@ export async function regenerateCardOutline(
       research,
       plan: currentPlan,
       targetOrder: order,
+      model,
     });
 
     const nextOutline = currentPlan.card_outline

@@ -23,6 +23,8 @@ export type Database = {
           google_ai_key_encrypted: string | null
           monthly_budget_usd: number | null
           openai_key_encrypted: string | null
+          planning_model: string
+          research_model: string
           updated_at: string
           user_id: string
         }
@@ -34,6 +36,8 @@ export type Database = {
           google_ai_key_encrypted?: string | null
           monthly_budget_usd?: number | null
           openai_key_encrypted?: string | null
+          planning_model?: string
+          research_model?: string
           updated_at?: string
           user_id: string
         }
@@ -45,6 +49,8 @@ export type Database = {
           google_ai_key_encrypted?: string | null
           monthly_budget_usd?: number | null
           openai_key_encrypted?: string | null
+          planning_model?: string
+          research_model?: string
           updated_at?: string
           user_id?: string
         }

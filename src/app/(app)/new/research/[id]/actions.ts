@@ -32,11 +32,22 @@ export async function generateResearch(
   try {
     const { supabase, user, project } = await getProjectForUser(projectId);
 
+    const { data: cred } = await supabase
+      .from("api_credentials")
+      .select("research_model")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const model =
+      cred?.research_model === "claude-sonnet-4-6"
+        ? "claude-sonnet-4-6"
+        : "claude-opus-4-7";
+
     const research = await runResearch({
       userId: user.id,
       projectId: project.id,
       topic: project.topic,
       tone: project.tone,
+      model,
     });
 
     // upsert (재생성 케이스 포함)

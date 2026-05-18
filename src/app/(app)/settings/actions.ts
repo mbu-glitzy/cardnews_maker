@@ -27,6 +27,8 @@ const settingsSchema = z.object({
     .string()
     .transform((v) => Number(v))
     .pipe(z.number().int().min(5).max(8)),
+  research_model: z.enum(["claude-opus-4-7", "claude-sonnet-4-6"]),
+  planning_model: z.enum(["claude-opus-4-7", "claude-sonnet-4-6"]),
 });
 
 export type SettingsResult =
@@ -50,6 +52,8 @@ export async function saveSettings(
     default_engine: formData.get("default_engine"),
     default_tone: formData.get("default_tone"),
     default_card_count: formData.get("default_card_count"),
+    research_model: formData.get("research_model"),
+    planning_model: formData.get("planning_model"),
   });
   if (!parsed.success) {
     return { ok: false, error: "입력값이 올바르지 않습니다." };
@@ -62,6 +66,8 @@ export async function saveSettings(
     default_engine: d.default_engine,
     default_tone: d.default_tone,
     default_card_count: d.default_card_count,
+    research_model: d.research_model,
+    planning_model: d.planning_model,
   };
 
   if (d.anthropic_key && d.anthropic_key.trim() !== "") {

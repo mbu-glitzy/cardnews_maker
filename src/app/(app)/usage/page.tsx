@@ -3,6 +3,7 @@ import { AlertTriangle, TrendingUp, Hash, Coins } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   aggregateByModel,
+  aggregateByOperation,
   aggregateByProject,
   aggregateDaily,
   getMonthlyBudget,
@@ -38,6 +39,7 @@ export default async function UsagePage({
   ]);
 
   const byModel = aggregateByModel(rows);
+  const byOperation = aggregateByOperation(rows);
   const daily = aggregateDaily(rows);
   const byProject = await aggregateByProject(userId, rows);
 
@@ -133,6 +135,62 @@ export default async function UsagePage({
           </p>
         ) : (
           <UsageChart data={daily} />
+        )}
+      </section>
+
+      {/* 단계별 모델 매핑 */}
+      <section className="card mb-6 overflow-hidden">
+        <div className="border-b border-border px-5 py-3">
+          <h2 className="text-sm font-semibold">단계별 모델 매핑</h2>
+          <p className="mt-0.5 text-xs text-text-muted">
+            각 워크플로우 단계에서 실제로 호출된 모델 · 호출 수 · 비용.
+          </p>
+        </div>
+        {byOperation.length === 0 ? (
+          <p className="px-5 py-8 text-center text-sm text-text-muted">
+            기록 없음
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {byOperation.map((op) => (
+              <li key={op.operation} className="px-5 py-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`rounded px-1.5 py-0.5 text-xs ${operationColor(op.operation)}`}>
+                      {operationLabel(op.operation)}
+                    </span>
+                    <span className="text-xs text-text-muted">
+                      {op.totalCalls}회
+                    </span>
+                  </div>
+                  <span className="text-sm font-medium tabular-nums">
+                    {formatUSD(op.totalCostUSD)}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  {op.models.map((m) => (
+                    <div
+                      key={m.model}
+                      className="flex items-center justify-between gap-2 text-xs"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <span className="text-text-primary">
+                          {labelOfModel(m.model)}
+                        </span>
+                        <span className="ml-2 font-mono text-text-muted">
+                          {m.model}
+                        </span>
+                      </div>
+                      <span className="text-text-secondary">{m.calls}회</span>
+                      <span className="w-20 text-right font-medium tabular-nums">
+                        {formatUSD(m.costUSD)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 
@@ -282,6 +340,31 @@ function Stat({
       {hint && <p className="mt-1 text-xs text-text-muted">{hint}</p>}
     </div>
   );
+}
+
+const OPERATION_LABELS: Record<string, string> = {
+  research: "1. 리서치",
+  plan: "2. 기획",
+  copy: "3. 카피",
+  image: "4. 이미지 (프롬프트+생성)",
+  metadata: "5. 캡션·해시태그",
+  misc: "기타",
+};
+
+const OPERATION_COLORS: Record<string, string> = {
+  research: "bg-sky-500/15 text-sky-400",
+  plan: "bg-violet-500/15 text-violet-400",
+  copy: "bg-amber-500/15 text-amber-400",
+  image: "bg-pink-500/15 text-pink-400",
+  metadata: "bg-emerald-500/15 text-emerald-400",
+  misc: "bg-bg-elevated text-text-secondary",
+};
+
+function operationLabel(op: string): string {
+  return OPERATION_LABELS[op] ?? op;
+}
+function operationColor(op: string): string {
+  return OPERATION_COLORS[op] ?? OPERATION_COLORS.misc;
 }
 
 function labelOfModel(model: string): string {

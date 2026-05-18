@@ -4,6 +4,13 @@ import { requireUserApiKey } from "@/lib/ai/keys";
 import { logTextUsage } from "@/lib/usage";
 import { extractJson } from "@/lib/ai/_utils";
 import type { Research } from "@/lib/ai/research";
+import type { TextModelId } from "@/lib/pricing";
+
+const PLANNING_ALLOWED: TextModelId[] = ["claude-opus-4-7", "claude-sonnet-4-6"];
+
+function resolvePlanningModel(model?: TextModelId): TextModelId {
+  return model && PLANNING_ALLOWED.includes(model) ? model : "claude-opus-4-7";
+}
 
 export const cardRoleEnum = z.enum([
   "hook",
@@ -62,11 +69,13 @@ export interface RunPlanningParams {
   tone: string;
   cardCount: number;
   research: Research;
+  model?: TextModelId;
 }
 
 export async function runPlanning(params: RunPlanningParams): Promise<Plan> {
   const apiKey = await requireUserApiKey(params.userId, "anthropic");
   const client = new Anthropic({ apiKey });
+  const model = resolvePlanningModel(params.model);
 
   const factsBlock = params.research.facts
     .map((f, i) => `${i + 1}. ${f.text}`)
@@ -85,7 +94,7 @@ ${factsBlock}
 위 정보로 카드뉴스 ${params.cardCount}장 기획안을 JSON 으로 출력해주세요.`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model,
     max_tokens: 4096,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: userPrompt }],
@@ -94,7 +103,7 @@ ${factsBlock}
   await logTextUsage({
     userId: params.userId,
     projectId: params.projectId,
-    model: "claude-opus-4-7",
+    model,
     operation: "plan",
     inputTokens: response.usage.input_tokens,
     outputTokens: response.usage.output_tokens,
@@ -148,6 +157,7 @@ export interface RegenerateOneOutlineParams {
   research: Research;
   plan: Plan;
   targetOrder: number;
+  model?: TextModelId;
 }
 
 export async function runRegenerateCardOutline(
@@ -155,6 +165,7 @@ export async function runRegenerateCardOutline(
 ): Promise<Plan["card_outline"][number]> {
   const apiKey = await requireUserApiKey(params.userId, "anthropic");
   const client = new Anthropic({ apiKey });
+  const model = resolvePlanningModel(params.model);
 
   const outlineBlock = params.plan.card_outline
     .map(
@@ -186,7 +197,7 @@ ${outlineBlock}
 { "card": { "order": ${params.targetOrder}, "role": "...", "summary": "..." } }`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model,
     max_tokens: 1024,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: userPrompt }],
@@ -195,7 +206,7 @@ ${outlineBlock}
   await logTextUsage({
     userId: params.userId,
     projectId: params.projectId,
-    model: "claude-opus-4-7",
+    model,
     operation: "plan",
     inputTokens: response.usage.input_tokens,
     outputTokens: response.usage.output_tokens,

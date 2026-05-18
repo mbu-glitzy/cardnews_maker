@@ -18,6 +18,8 @@ type Initial = {
   default_engine: string;
   default_tone: string;
   default_card_count: number;
+  research_model: string;
+  planning_model: string;
 };
 
 export function SettingsForm({ initial }: { initial: Initial }) {
@@ -163,6 +165,31 @@ export function SettingsForm({ initial }: { initial: Initial }) {
         </div>
       </section>
 
+      {/* AI 모델 선택 (비용 영향 큼) */}
+      <section className="card overflow-hidden">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-sm font-semibold">AI 모델 선택</h2>
+          <p className="mt-0.5 text-xs text-text-secondary">
+            리서치·기획 단계의 모델 선택. <span className="text-amber-400">Opus 4.7은 정교하지만 약 5배 비쌈.</span>{" "}
+            카피·이미지 프롬프트는 Sonnet, 캡션은 Haiku 고정.
+          </p>
+        </div>
+        <div className="space-y-4 px-5 py-5">
+          <ModelChoice
+            name="research_model"
+            label="리서치 (web 검색 + 출처 정리)"
+            initial={initial.research_model}
+            hint="입력 토큰이 크게 늘어나는 단계 — 모델 차이가 비용에 가장 큼"
+          />
+          <ModelChoice
+            name="planning_model"
+            label="기획 (타겟·핵심 메시지·카드 구성)"
+            initial={initial.planning_model}
+            hint="추론 품질이 결과에 직접 반영됨"
+          />
+        </div>
+      </section>
+
       {/* 저장 */}
       <div className="flex items-center justify-end gap-3">
         {saveResult && (
@@ -187,6 +214,63 @@ export function SettingsForm({ initial }: { initial: Initial }) {
         </button>
       </div>
     </form>
+  );
+}
+
+function ModelChoice({
+  name,
+  label,
+  initial,
+  hint,
+}: {
+  name: string;
+  label: string;
+  initial: string;
+  hint: string;
+}) {
+  const [value, setValue] = useState(initial);
+  const options = [
+    {
+      value: "claude-opus-4-7",
+      title: "Claude Opus 4.7",
+      desc: "최고 품질 · 비쌈",
+      price: "$15 / $75 per 1M tokens",
+    },
+    {
+      value: "claude-sonnet-4-6",
+      title: "Claude Sonnet 4.6",
+      desc: "가성비 · 충분히 좋음",
+      price: "$3 / $15 per 1M tokens",
+    },
+  ];
+
+  return (
+    <div>
+      <label className="label">{label}</label>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {options.map((o) => {
+          const selected = value === o.value;
+          return (
+            <button
+              type="button"
+              key={o.value}
+              onClick={() => setValue(o.value)}
+              className={`rounded-md border px-3 py-3 text-left text-xs transition-colors ${
+                selected
+                  ? "border-accent bg-accent/10"
+                  : "border-border bg-bg-surface hover:border-border-strong"
+              }`}
+            >
+              <p className="font-medium text-text-primary">{o.title}</p>
+              <p className="mt-0.5 text-text-secondary">{o.desc}</p>
+              <p className="mt-1 font-mono text-text-muted">{o.price}</p>
+            </button>
+          );
+        })}
+      </div>
+      <input type="hidden" name={name} value={value} />
+      <p className="mt-1 text-xs text-text-muted">{hint}</p>
+    </div>
   );
 }
 
