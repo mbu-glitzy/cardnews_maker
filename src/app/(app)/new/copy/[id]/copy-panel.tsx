@@ -14,6 +14,7 @@ import {
   regenerateOneCard,
   saveCardEdit,
 } from "./actions";
+import { getRoleMeta } from "@/lib/ai/roles";
 
 type Card = {
   order: number;
@@ -23,22 +24,14 @@ type Card = {
   cta: string | null;
 };
 
-const ROLE_LABELS: Record<string, { label: string; color: string }> = {
-  hook: { label: "후킹", color: "bg-amber-500/15 text-amber-400" },
-  cover: { label: "커버", color: "bg-amber-500/15 text-amber-400" },
-  problem: { label: "문제", color: "bg-red-500/15 text-red-400" },
-  solution: { label: "해법", color: "bg-emerald-500/15 text-emerald-400" },
-  proof: { label: "근거", color: "bg-sky-500/15 text-sky-400" },
-  detail: { label: "디테일", color: "bg-violet-500/15 text-violet-400" },
-  cta: { label: "CTA", color: "bg-accent/15 text-accent" },
-};
-
 export function CopyPanel({
   projectId,
   cards: initial,
+  tone,
 }: {
   projectId: string;
   cards: Card[];
+  tone: string;
 }) {
   const [cards, setCards] = useState<Card[]>(initial);
   const [generating, startGenerate] = useTransition();
@@ -87,10 +80,10 @@ export function CopyPanel({
       <div className="card flex flex-col items-center px-6 py-16 text-center">
         <Sparkles className="mb-3 h-8 w-8 text-accent" />
         <p className="mb-1 text-sm font-medium">
-          {cards.length}장의 카드 카피를 생성합니다
+          {cards.length}장의 카드 카피를 작성합니다
         </p>
         <p className="mb-5 text-xs text-text-secondary">
-          Claude Sonnet 4.6 으로 헤드라인 · 본문 · CTA 를 한 번에 생성합니다.
+          기획안의 카드별 역할에 맞춰 헤드라인과 본문을 한 번에 생성합니다.
           <br />
           보통 15~25초 소요됩니다.
         </p>
@@ -103,11 +96,11 @@ export function CopyPanel({
         >
           {generating ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" /> 생성 중...
+              <Loader2 className="h-4 w-4 animate-spin" /> 카드별 카피 작성 중...
             </>
           ) : (
             <>
-              <Sparkles className="h-4 w-4" /> 카피 생성
+              <Sparkles className="h-4 w-4" /> 카피 작성 시작
             </>
           )}
         </button>
@@ -123,6 +116,7 @@ export function CopyPanel({
             key={c.order}
             projectId={projectId}
             card={c}
+            tone={tone}
             onChange={(updated) =>
               setCards((prev) =>
                 prev.map((p) => (p.order === updated.order ? updated : p))
@@ -174,10 +168,12 @@ export function CopyPanel({
 function CardEditor({
   projectId,
   card,
+  tone,
   onChange,
 }: {
   projectId: string;
   card: Card;
+  tone: string;
   onChange: (c: Card) => void;
 }) {
   const [headline, setHeadline] = useState(card.headline);
@@ -188,10 +184,7 @@ function CardEditor({
   );
   const [regenerating, startRegen] = useTransition();
 
-  const meta = ROLE_LABELS[card.role] ?? {
-    label: card.role,
-    color: "bg-bg-elevated text-text-secondary",
-  };
+  const meta = getRoleMeta(card.role, tone);
 
   async function handleSave() {
     setSaving("saving");

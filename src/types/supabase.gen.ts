@@ -395,7 +395,7 @@ export type Database = {
         | "problem"
         | "solution"
         | "proof"
-        | "cta"
+        | "closing"
         | "detail"
         | "cover"
       project_status:
@@ -538,7 +538,7 @@ export const Constants = {
         "problem",
         "solution",
         "proof",
-        "cta",
+        "closing",
         "detail",
         "cover",
       ],

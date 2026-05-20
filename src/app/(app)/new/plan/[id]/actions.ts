@@ -188,7 +188,7 @@ export async function confirmPlan(projectId: string): Promise<void> {
         | "problem"
         | "solution"
         | "proof"
-        | "cta"
+        | "closing"
         | "detail"
         | "cover",
       headline: "",

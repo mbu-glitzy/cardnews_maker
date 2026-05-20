@@ -48,6 +48,13 @@
 - **해결**: 컬럼 rename `cards.order` → `cards.card_order` (마이그레이션 1줄). 모든 코드의 `.eq("order")` / `.order("order")` / `select("\"order\"")` 일괄 변경. client side 객체에서 `.order` 사용을 유지하고 싶으면 select 에 alias 사용 (`order:card_order`).
 - **규칙**: 컬럼명을 정할 때 **SQL 예약어 + PostgREST 예약 쿼리 파라미터 (`select`/`order`/`limit`/`offset`/`columns`) 와 같은 이름 사용 금지**. 신규 스키마 작성 시 `card_order`, `display_order`, `position` 등 충돌 없는 이름.
 
+## 2026-05-20 — role enum 의미와 UI 라벨 분리
+- **문제**: `cards.role` enum에 `cta` 값을 두고 프롬프트로만 "외부 액션 유도 X, 시리즈 자체 완결" 정책을 강제했더니, UI 라벨 "CTA"가 의미를 거짓말하게 됨. 게다가 톤마다 같은 role(`cta`, `problem`)의 의미가 다른데(informative=인사이트 정리, emotional=여운) UI는 고정 라벨로만 표시.
+- **원인**: 데이터 모델의 enum 이름이 도메인 의도와 불일치 + UI 라벨을 톤 컨텍스트 없이 고정 매핑.
+- **해결**: enum 값 자체를 `cta` → `closing`으로 rename (`alter type ... rename value` 한 줄 마이그레이션). 라벨은 `src/lib/ai/roles.ts`의 `getRoleMeta(role, tone)` 헬퍼로 톤별 다르게 매핑 (예: closing → informative="인사이트 정리" / emotional="여운"). 색상은 role별로 일관 유지.
+- **규칙**: enum 이름은 도메인 의도와 정확히 맞춰야 함. 같은 enum 값이 컨텍스트(여기선 톤)에 따라 의미가 달라진다면 UI 라벨은 헬퍼 함수로 동적 매핑. 인라인 `ROLE_LABELS` 같은 패턴을 여러 컴포넌트에 복붙하지 말 것.
+- **부수효과**: `supabase.gen.ts`도 enum 'cta'→'closing' 두 곳 수동 동기 (CLI 재실행 시 동일 결과 보장). `cards.cta` 컬럼(text)은 role enum과 별개이며 항상 null이라 그대로 유지.
+
 ## 2026-05-13 — `.env.local.example` 보안 규칙
 - **문제**: 사용자가 실제 API 키를 `.env.local.example` 에 입력 → git 커밋 위험.
 - **원인**: `.gitignore` 에서 `!.env.local.example` 로 의도적 제외돼 있음 (포맷 공유 목적).

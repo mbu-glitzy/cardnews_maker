@@ -15,25 +15,25 @@ import {
   regenerateCardOutline,
 } from "./actions";
 import type { Plan } from "@/lib/ai/planning";
+import { getRoleMeta } from "@/lib/ai/roles";
 
 type OutlineItem = Plan["card_outline"][number];
 
 function PlanCardRow({
   projectId,
   card,
+  tone,
   disabled,
   onUpdate,
 }: {
   projectId: string;
   card: OutlineItem;
+  tone: string;
   disabled: boolean;
   onUpdate: (next: OutlineItem) => void;
 }) {
   const [regen, setRegen] = useState(false);
-  const meta = ROLE_LABELS[card.role] ?? {
-    label: card.role,
-    color: "bg-bg-elevated text-text-secondary",
-  };
+  const meta = getRoleMeta(card.role, tone);
 
   async function handleRegenerate() {
     setRegen(true);
@@ -80,24 +80,16 @@ function PlanCardRow({
   );
 }
 
-const ROLE_LABELS: Record<string, { label: string; color: string }> = {
-  hook: { label: "후킹", color: "bg-amber-500/15 text-amber-400" },
-  cover: { label: "커버", color: "bg-amber-500/15 text-amber-400" },
-  problem: { label: "문제", color: "bg-red-500/15 text-red-400" },
-  solution: { label: "해법", color: "bg-emerald-500/15 text-emerald-400" },
-  proof: { label: "근거", color: "bg-sky-500/15 text-sky-400" },
-  detail: { label: "디테일", color: "bg-violet-500/15 text-violet-400" },
-  cta: { label: "CTA", color: "bg-accent/15 text-accent" },
-};
-
 export function PlanPanel({
   projectId,
   cardCount,
+  tone,
   initial,
   confirmed,
 }: {
   projectId: string;
   cardCount: number;
+  tone: string;
   initial: Plan | null;
   confirmed: boolean;
 }) {
@@ -184,6 +176,7 @@ export function PlanPanel({
               key={card.order}
               projectId={projectId}
               card={card}
+              tone={tone}
               disabled={generating || confirming}
               onUpdate={(updated) =>
                 setPlan((prev) =>

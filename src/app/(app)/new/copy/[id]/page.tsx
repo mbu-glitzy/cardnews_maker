@@ -40,7 +40,7 @@ export default async function CopyPage({
         <h1 className="mt-1 text-xl font-bold leading-tight">{project.topic}</h1>
       </header>
 
-      <CopyPanel projectId={id} cards={cards ?? []} />
+      <CopyPanel projectId={id} cards={cards ?? []} tone={project.tone} />
     </div>
   );
 }

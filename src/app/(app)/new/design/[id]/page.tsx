@@ -68,6 +68,7 @@ export default async function DesignPage({
       <DesignPanel
         projectId={id}
         cards={cards ?? []}
+        tone={project.tone}
         defaultEngine={
           (cred?.default_engine as "nano-banana-pro" | "gpt-image-2") ??
           "nano-banana-pro"

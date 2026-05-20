@@ -25,6 +25,7 @@ import {
   markCompleted,
 } from "./actions";
 import { publishToInstagram } from "./publish-actions";
+import { getRoleMeta } from "@/lib/ai/roles";
 
 type CardForDesign = {
   id: string;
@@ -43,6 +44,7 @@ type Status = "draft" | "researching" | "planning" | "copywriting" | "imaging" |
 export function DesignPanel({
   projectId,
   cards: initialCards,
+  tone,
   defaultEngine,
   caption: initialCaption,
   hashtags: initialHashtags,
@@ -53,6 +55,7 @@ export function DesignPanel({
 }: {
   projectId: string;
   cards: CardForDesign[];
+  tone: string;
   defaultEngine: "nano-banana-pro" | "gpt-image-2";
   caption: string | null;
   hashtags: string[] | null;
@@ -205,20 +208,12 @@ export function DesignPanel({
       <section className="card overflow-hidden">
         <div className="border-b border-border px-5 py-4">
           <h2 className="text-sm font-semibold">디자인 생성</h2>
-          <p className="mt-0.5 text-xs text-text-secondary">
-            1단계: 카드별 이미지 프롬프트 생성 (Sonnet) → 2단계: 배경 이미지
-            생성 (이미지 모델) → 3단계: 텍스트·로고 합성 (코드)
-          </p>
-          {allHavePrompts && !allHaveImages && (
-            <p className="mt-2 text-xs text-emerald-400">
-              ✓ 프롬프트 생성 완료. 이제 &ldquo;배경 이미지 전체 생성&rdquo; 클릭.
-            </p>
-          )}
-          {allHaveImages && (
-            <p className="mt-2 text-xs text-emerald-400">
-              ✓ 이미지 생성 완료. 아래에서 미리보기·다운로드 가능.
-            </p>
-          )}
+          <DesignStepper
+            promptsDone={allHavePrompts}
+            imagesDone={allHaveImages}
+            promptsLoading={promptsLoading}
+            imagesLoading={imagesLoading}
+          />
         </div>
         <div className="px-5 py-5">
           <div className="mb-4 flex items-center gap-3">
@@ -288,6 +283,7 @@ export function DesignPanel({
             <CardPreview
               key={c.id}
               card={c}
+              tone={tone}
               onRegenerate={() => handleRegenOneImage(c.order)}
               onDownload={() => handleDownloadOne(c)}
               disabled={imagesLoading || downloading}
@@ -460,29 +456,96 @@ export function DesignPanel({
   );
 }
 
-const ROLE_COLORS: Record<string, string> = {
-  hook: "bg-amber-500/15 text-amber-400",
-  cover: "bg-amber-500/15 text-amber-400",
-  problem: "bg-red-500/15 text-red-400",
-  solution: "bg-emerald-500/15 text-emerald-400",
-  proof: "bg-sky-500/15 text-sky-400",
-  detail: "bg-violet-500/15 text-violet-400",
-  cta: "bg-accent/15 text-accent",
-};
+function DesignStepper({
+  promptsDone,
+  imagesDone,
+  promptsLoading,
+  imagesLoading,
+}: {
+  promptsDone: boolean;
+  imagesDone: boolean;
+  promptsLoading: boolean;
+  imagesLoading: boolean;
+}) {
+  const step1State = promptsLoading
+    ? "active"
+    : promptsDone
+    ? "done"
+    : "pending";
+  const step2State = imagesLoading
+    ? "active"
+    : imagesDone
+    ? "done"
+    : promptsDone
+    ? "ready"
+    : "pending";
+  const step3State = imagesDone ? "ready" : "pending";
+
+  return (
+    <ol className="mt-3 flex items-stretch gap-2">
+      <StepperItem n={1} label="프롬프트 생성" hint="Sonnet" state={step1State} />
+      <StepperItem n={2} label="배경 이미지" hint="이미지 모델" state={step2State} />
+      <StepperItem n={3} label="텍스트·로고 합성" hint="코드" state={step3State} />
+    </ol>
+  );
+}
+
+function StepperItem({
+  n,
+  label,
+  hint,
+  state,
+}: {
+  n: number;
+  label: string;
+  hint: string;
+  state: "pending" | "ready" | "active" | "done";
+}) {
+  const styles: Record<typeof state, string> = {
+    pending: "bg-bg-elevated/40 text-text-muted",
+    ready: "bg-accent/10 text-accent ring-1 ring-accent/40",
+    active: "bg-accent/15 text-accent ring-1 ring-accent",
+    done: "bg-emerald-500/10 text-emerald-400",
+  };
+  const badge: Record<typeof state, string> = {
+    pending: "bg-bg-elevated text-text-muted",
+    ready: "bg-accent/20 text-accent",
+    active: "bg-accent text-white",
+    done: "bg-emerald-500/20 text-emerald-400",
+  };
+  return (
+    <li
+      className={`flex flex-1 items-center gap-2 rounded-md px-3 py-2 text-xs ${styles[state]}`}
+    >
+      <span
+        className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${badge[state]}`}
+      >
+        {state === "done" ? "✓" : n}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate font-medium">{label}</p>
+        <p className="truncate text-[10px] opacity-70">{hint}</p>
+      </div>
+    </li>
+  );
+}
 
 function CardPreview({
   card,
+  tone,
   onRegenerate,
   onDownload,
   disabled,
 }: {
   card: CardForDesign;
+  tone: string;
   onRegenerate: () => void;
   onDownload: () => void;
   disabled: boolean;
 }) {
   const [regen, setRegen] = useState(false);
   const hasImage = !!card.image_url;
+  const meta = getRoleMeta(card.role, tone);
 
   async function handleRegenerate() {
     setRegen(true);
@@ -510,7 +573,7 @@ function CardPreview({
           <div className="flex h-full flex-col items-center justify-center px-4 text-center">
             <ImageIcon className="mb-2 h-6 w-6 text-text-muted" />
             <p className="text-xs text-text-muted">
-              {card.image_prompt ? "이미지 생성 대기" : "프롬프트 대기"}
+              {card.image_prompt ? "배경 생성 대기" : "프롬프트 생성 전"}
             </p>
           </div>
         )}
@@ -521,11 +584,9 @@ function CardPreview({
             {card.order}
           </span>
           <span
-            className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-              ROLE_COLORS[card.role] ?? "bg-bg-elevated text-text-secondary"
-            }`}
+            className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${meta.color}`}
           >
-            {card.role}
+            {meta.label}
           </span>
         </div>
       </div>

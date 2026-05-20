@@ -45,6 +45,7 @@ export default async function PlanPage({
       <PlanPanel
         projectId={id}
         cardCount={project.card_count}
+        tone={project.tone}
         initial={existing}
         confirmed={!!row?.confirmed_at}
       />
