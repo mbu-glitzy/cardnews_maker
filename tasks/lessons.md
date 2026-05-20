@@ -48,6 +48,11 @@
 - **해결**: 컬럼 rename `cards.order` → `cards.card_order` (마이그레이션 1줄). 모든 코드의 `.eq("order")` / `.order("order")` / `select("\"order\"")` 일괄 변경. client side 객체에서 `.order` 사용을 유지하고 싶으면 select 에 alias 사용 (`order:card_order`).
 - **규칙**: 컬럼명을 정할 때 **SQL 예약어 + PostgREST 예약 쿼리 파라미터 (`select`/`order`/`limit`/`offset`/`columns`) 와 같은 이름 사용 금지**. 신규 스키마 작성 시 `card_order`, `display_order`, `position` 등 충돌 없는 이름.
 
+## 2026-05-20 — 커밋 = 푸시 (사용자 워크플로우)
+- **규칙**: "커밋해줘" 요청 = `git commit` + `git push` 까지. 별도로 푸시 확인 묻지 말 것.
+- **이유**: 사용자가 `main` 브랜치 → Vercel 자동 배포 흐름을 의도적으로 사용. 커밋만 하고 멈추면 워크플로우가 끊김.
+- **예외**: 사용자가 명시적으로 "푸시는 하지 마" / "로컬에만 커밋" 이라고 한 경우. force push 류는 여전히 별도 확인.
+
 ## 2026-05-20 — role enum 의미와 UI 라벨 분리
 - **문제**: `cards.role` enum에 `cta` 값을 두고 프롬프트로만 "외부 액션 유도 X, 시리즈 자체 완결" 정책을 강제했더니, UI 라벨 "CTA"가 의미를 거짓말하게 됨. 게다가 톤마다 같은 role(`cta`, `problem`)의 의미가 다른데(informative=인사이트 정리, emotional=여운) UI는 고정 라벨로만 표시.
 - **원인**: 데이터 모델의 enum 이름이 도메인 의도와 불일치 + UI 라벨을 톤 컨텍스트 없이 고정 매핑.
