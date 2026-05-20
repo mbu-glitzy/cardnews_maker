@@ -48,6 +48,19 @@
 - **해결**: 컬럼 rename `cards.order` → `cards.card_order` (마이그레이션 1줄). 모든 코드의 `.eq("order")` / `.order("order")` / `select("\"order\"")` 일괄 변경. client side 객체에서 `.order` 사용을 유지하고 싶으면 select 에 alias 사용 (`order:card_order`).
 - **규칙**: 컬럼명을 정할 때 **SQL 예약어 + PostgREST 예약 쿼리 파라미터 (`select`/`order`/`limit`/`offset`/`columns`) 와 같은 이름 사용 금지**. 신규 스키마 작성 시 `card_order`, `display_order`, `position` 등 충돌 없는 이름.
 
+## 2026-05-20 — Postgres `REVOKE EXECUTE` 는 PUBLIC 도 같이 빼야 한다
+- **문제**: `handle_new_user()` SECURITY DEFINER 함수가 `/rest/v1/rpc/handle_new_user` 로 외부 호출 가능 (advisor 경고). `revoke execute ... from anon, authenticated;` 적용했는데 advisor 그대로.
+- **원인**: Postgres 는 함수 생성 시 **PUBLIC role 에 EXECUTE 권한 자동 부여**. `anon`/`authenticated` 는 PUBLIC 의 멤버라서, PUBLIC 권한이 남아있는 한 멤버 role 에서 직접 revoke 해도 여전히 실행 가능.
+- **해결**: `revoke execute on function ... from public;` 도 같이 적용. PUBLIC + 명시 role 둘 다 회수해야 진짜 차단.
+- **규칙**: 신규 함수 생성 마이그레이션 작성 시 처음부터 `revoke execute on function X from public;` 한 줄을 같이 넣을 것. SECURITY DEFINER 면 더더욱.
+- **검증 도구**: Supabase MCP 의 `get_advisors(type='security')` 가 PostgREST 노출 여부를 정확히 잡아줌. DDL 변경 후 항상 재실행.
+
+## 2026-05-20 — Supabase MCP 로 마이그레이션 적용 (워크플로우 단순화)
+- **상황**: 기존엔 `npx supabase db push --include-all` + `SUPABASE_DB_PASSWORD` 환경변수 + 비밀번호 특수문자 escape 신경써야 했음.
+- **현재**: Supabase MCP 의 `apply_migration(project_id, name, query)` 한 번 호출로 DB 적용 + history 기록. 비밀번호 우회 불필요.
+- **규칙**: 로컬 git 파일은 별도로 `supabase/migrations/<timestamp>_<name>.sql` 에 같이 작성. MCP 는 DB 적용용, 파일은 git 정합성용. 두 곳 모두 갱신해야 다음 환경(예: Vercel 자동 배포 시 supabase 빌드 단계)에서도 동일.
+- **검증**: 적용 후 `list_migrations` + `get_advisors` 자동 호출로 즉시 검증 가능.
+
 ## 2026-05-20 — 커밋 = 푸시 (사용자 워크플로우)
 - **규칙**: "커밋해줘" 요청 = `git commit` + `git push` 까지. 별도로 푸시 확인 묻지 말 것.
 - **이유**: 사용자가 `main` 브랜치 → Vercel 자동 배포 흐름을 의도적으로 사용. 커밋만 하고 멈추면 워크플로우가 끊김.
