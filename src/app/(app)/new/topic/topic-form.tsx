@@ -5,8 +5,9 @@ import { Loader2, Sparkles, Star } from "lucide-react";
 import { createProject } from "./actions";
 
 const TONES = [
-  { value: "informative", label: "정보형", desc: "팩트·통계 중심" },
-  { value: "emotional", label: "감성형", desc: "스토리·공감" },
+  { value: "informative", label: "정보형", desc: "팩트·통계·해법" },
+  { value: "issue", label: "이슈/시사", desc: "사건·현황·시사점" },
+  { value: "emotional", label: "감성형", desc: "스토리·공감·여운" },
   { value: "humorous", label: "유머", desc: "가볍고 위트있게" },
   { value: "sophisticated", label: "세련", desc: "프리미엄 톤" },
 ];
@@ -66,7 +67,7 @@ export function TopicForm({
         <div className="border-b border-border px-5 py-4">
           <h2 className="text-sm font-semibold">톤</h2>
         </div>
-        <div className="grid grid-cols-2 gap-2 px-5 py-5 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 px-5 py-5 sm:grid-cols-3 lg:grid-cols-5">
           {TONES.map((t) => (
             <button
               type="button"

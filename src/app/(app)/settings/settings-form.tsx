@@ -139,6 +139,7 @@ export function SettingsForm({ initial }: { initial: Initial }) {
                 className="input"
               >
                 <option value="informative">정보형</option>
+                <option value="issue">이슈/시사</option>
                 <option value="emotional">감성형</option>
                 <option value="humorous">유머</option>
                 <option value="sophisticated">세련</option>

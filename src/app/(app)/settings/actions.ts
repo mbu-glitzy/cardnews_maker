@@ -22,7 +22,13 @@ const settingsSchema = z.object({
       return Number.isFinite(n) && n >= 0 ? n : null;
     }),
   default_engine: z.enum(["nano-banana-pro", "gpt-image-2"]),
-  default_tone: z.enum(["informative", "emotional", "humorous", "sophisticated"]),
+  default_tone: z.enum([
+    "informative",
+    "issue",
+    "emotional",
+    "humorous",
+    "sophisticated",
+  ]),
   default_card_count: z
     .string()
     .transform((v) => Number(v))
