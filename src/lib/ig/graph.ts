@@ -183,25 +183,78 @@ export async function createCarouselContainer(params: {
 /**
  * 컨테이너 상태 확인. FINISHED 가 되면 게시 가능.
  * status_code: IN_PROGRESS | FINISHED | ERROR | EXPIRED | PUBLISHED
- * status: 사람이 읽을 수 있는 verbose 상태 ("Finished" / "Error: <reason>" 등)
+ *
+ * 주의: IG Graph v23.0 에서 컨테이너 객체는 `status_code` 만 안정적으로 지원.
+ * 과거 버전의 verbose `status` 필드를 같이 요청하면 (#100 subcode 33) 으로 400.
+ * verbose 사유가 필요하면 status_code === ERROR 일 때 별도 호출 (best-effort).
+ *
+ * Return shape:
+ *  - statusCode: 위 6개 값 중 하나 (HTTP 응답 본문에서 파싱)
+ *  - status: verbose 메시지 (HTTP 실패 시 응답 본문 raw)
+ *  - transient: HTTP 응답이 실패했지만 재시도 가능한 경우 true (e.g. code 100/subcode 33 — 컨테이너 propagation 지연)
  */
 export async function getContainerStatus(
   containerId: string,
   pageAccessToken: string
-): Promise<{ statusCode: string; status: string | null }> {
+): Promise<{ statusCode: string; status: string | null; transient: boolean }> {
   const u = new URL(`${GRAPH_BASE}/${containerId}`);
-  u.searchParams.set("fields", "status_code,status");
+  u.searchParams.set("fields", "status_code");
   u.searchParams.set("access_token", pageAccessToken);
   const res = await fetch(u.toString());
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    return { statusCode: "ERROR", status: `상태 조회 실패 (${res.status}): ${text}` };
+    const transient = isTransientLookupError(text);
+    return {
+      statusCode: transient ? "IN_PROGRESS" : "ERROR",
+      status: `상태 조회 실패 (${res.status}): ${text}`,
+      transient,
+    };
   }
-  const data = (await res.json()) as { status_code?: string; status?: string };
+  const data = (await res.json()) as { status_code?: string };
   return {
     statusCode: data.status_code ?? "UNKNOWN",
-    status: data.status ?? null,
+    status: null,
+    transient: false,
   };
+}
+
+/**
+ * Meta Graph API 가 "방금 만든 객체가 아직 안 보임" 으로 돌려주는 transient 에러 판별.
+ * code=100 + subcode=33 = "Object does not exist or cannot be loaded...".
+ * 컨테이너 생성 직후 1~3초 안에 흔히 발생. 재시도하면 풀린다.
+ */
+function isTransientLookupError(bodyText: string): boolean {
+  try {
+    const parsed = JSON.parse(bodyText) as {
+      error?: { code?: number; error_subcode?: number };
+    };
+    const code = parsed.error?.code;
+    const sub = parsed.error?.error_subcode;
+    return code === 100 && sub === 33;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * ERROR 상태일 때 best-effort 로 verbose 사유 시도.
+ * `status` 필드를 단독으로 한 번 더 요청. 권한/필드 미지원이면 null 반환.
+ */
+async function tryFetchVerboseStatus(
+  containerId: string,
+  pageAccessToken: string
+): Promise<string | null> {
+  try {
+    const u = new URL(`${GRAPH_BASE}/${containerId}`);
+    u.searchParams.set("fields", "status");
+    u.searchParams.set("access_token", pageAccessToken);
+    const res = await fetch(u.toString());
+    if (!res.ok) return null;
+    const data = (await res.json()) as { status?: string };
+    return data.status ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -308,25 +361,45 @@ export async function publishCarousel(params: {
 async function waitForFinished(
   containerId: string,
   pageAccessToken: string,
-  opts: { maxWaitMs?: number; intervalMs?: number } = {}
+  opts: { maxWaitMs?: number; intervalMs?: number; initialDelayMs?: number } = {}
 ): Promise<void> {
   const max = opts.maxWaitMs ?? 60_000;
   const interval = opts.intervalMs ?? 2_000;
+  // IG 가 새로 만든 컨테이너 ID 를 Meta 엣지에 propagate 하는 데 1~2초 정도 걸린다.
+  // 그 사이 GET 하면 code=100/subcode=33 으로 떨어진다. 첫 폴링 전 약간 대기.
+  const initialDelay = opts.initialDelayMs ?? 1_500;
+  await new Promise((r) => setTimeout(r, initialDelay));
+
   const start = Date.now();
+  let lastTransientError: string | null = null;
 
   while (Date.now() - start < max) {
-    const { statusCode, status } = await getContainerStatus(
+    const { statusCode, status, transient } = await getContainerStatus(
       containerId,
       pageAccessToken
     );
+
     if (statusCode === "FINISHED") return;
-    if (statusCode === "ERROR" || statusCode === "EXPIRED") {
-      const detail = status ? ` — ${status}` : "";
+
+    if (transient) {
+      // 아직 propagation 중. 다음 폴링에 다시 시도.
+      lastTransientError = status;
+    } else if (statusCode === "ERROR" || statusCode === "EXPIRED") {
+      const verbose =
+        status ?? (await tryFetchVerboseStatus(containerId, pageAccessToken));
+      const detail = verbose ? ` — ${verbose}` : "";
       throw new Error(
         `컨테이너 처리 실패: ${statusCode}${detail} (container_id=${containerId})`
       );
     }
+
     await new Promise((r) => setTimeout(r, interval));
   }
-  throw new Error("컨테이너 처리 시간 초과 (60초)");
+
+  const tail = lastTransientError
+    ? ` — 마지막 응답: ${lastTransientError}`
+    : "";
+  throw new Error(
+    `컨테이너 처리 시간 초과 (60초)${tail} (container_id=${containerId})`
+  );
 }
