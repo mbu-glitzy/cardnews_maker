@@ -51,14 +51,14 @@ export function TopicForm({
             name="topic"
             required
             minLength={2}
-            maxLength={200}
+            maxLength={500}
             rows={3}
             placeholder="예: 2026년 SaaS 마케팅에서 효과적인 CTA 전략 5가지"
             className="input resize-none"
             autoFocus
           />
           <p className="mt-2 text-xs text-text-muted">
-            구체적일수록 정확한 리서치 결과를 얻습니다. (2~200자)
+            구체적일수록 정확한 리서치 결과를 얻습니다. (2~500자)
           </p>
         </div>
       </section>

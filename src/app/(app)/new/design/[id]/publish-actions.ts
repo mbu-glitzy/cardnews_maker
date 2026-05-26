@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import sharp from "sharp";
 import {
   createSupabaseAdminClient,
   createSupabaseServerClient,
@@ -97,19 +98,25 @@ export async function publishToInstagram(
             `${c.order}번 카드 렌더 응답이 이미지가 아님 (content-type: ${ct})`
           );
         }
-        const buf = Buffer.from(await res.arrayBuffer());
-        if (buf.length < 1000) {
+        const pngBuf = Buffer.from(await res.arrayBuffer());
+        if (pngBuf.length < 1000) {
           throw new Error(
-            `${c.order}번 카드 렌더 결과가 너무 작음 (${buf.length} bytes)`
+            `${c.order}번 카드 렌더 결과가 너무 작음 (${pngBuf.length} bytes)`
           );
         }
-        const base64 = buf.toString("base64");
-        const path = `${user.id}/${projectId}/published-${c.order}-${Date.now()}.png`;
+        // IG Graph API 는 JPEG 만 공식 지원. PNG 는 컨테이너 단계에서 ERROR 로 떨어지는 일이 잦음.
+        // 알파 채널 평탄화 + sRGB + JPEG 인코딩으로 통일.
+        const jpegBuf = await sharp(pngBuf)
+          .flatten({ background: "#ffffff" })
+          .jpeg({ quality: 90, mozjpeg: true, chromaSubsampling: "4:4:4" })
+          .toBuffer();
+        const base64 = jpegBuf.toString("base64");
+        const path = `${user.id}/${projectId}/published-${c.order}-${Date.now()}.jpg`;
         return uploadBase64ToBucket({
           bucket: "rendered-cards",
           path,
           base64,
-          contentType: "image/png",
+          contentType: "image/jpeg",
         });
       })
     );

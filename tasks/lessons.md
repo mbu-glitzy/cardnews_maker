@@ -79,4 +79,18 @@
 - **해결**: 실제 키는 `.env.local` 에만 입력. `.env.local.example` 은 placeholder 유지.
 - **규칙**: 키 관련 작업 시 항상 `.env.local` 인지 `.env.local.example` 인지 명확히 안내. placeholder 복원 패턴 숙지.
 
+## 2026-05-26 — Zod 기본 에러 메시지가 그대로 사용자에게 노출
+- **문제**: 토픽 제출 시 "String must contain at most 200 character(s)" 영문 에러가 그대로 노출. UI textarea 에 `maxLength` 가 있어도 IME 조합/복붙/일부 환경에서 우회 가능.
+- **원인**: server action 의 `parsed.error.issues.map((i) => i.message).join(", ")` 가 Zod 기본 영문 메시지를 그대로 join. schema 에 한국어 message 미지정.
+- **해결**: Zod 체이닝에 `.min(2, { message: "..." }).max(500, { message: "..." })` 식으로 한국어 메시지 명시. 동시에 폼 `maxLength` + 안내 문구도 같은 숫자로 동기화.
+- **부수 발견**: 같은 schema 의 `tone` enum 에 `issue` 값이 누락돼 있었음 (폼에는 5개 톤, schema 엔 4개). 새 enum 값 추가 시 server action validation 도 같이 갱신해야 함.
+- **규칙**: 사용자 노출 가능성이 있는 모든 Zod schema 는 한국어 message 명시. enum 값 추가/변경 시 (1) DB enum, (2) gen types, (3) server action validation, (4) UI 옵션 — 4곳 모두 같이 갱신.
+
+## 2026-05-26 — Instagram Graph API 캐러셀은 PNG 가 아니라 JPEG (핵심)
+- **문제**: 발행 시 "컨테이너 처리 실패: ERROR". `next/og` 의 `ImageResponse` 가 PNG 를 출력 → 그대로 Storage 업로드 → IG 에 전달 → 컨테이너 단계에서 ERROR.
+- **원인**: IG Graph API 는 공식적으로 **JPEG 만 지원**. PNG 는 알파 채널/비-sRGB 색공간 등으로 컨테이너 처리 단계에서 ERROR 로 잘 떨어짐. 게다가 `getContainerStatus` 가 `status_code` 만 가져와서 IG 가 알려주는 사유(`status` verbose 필드)를 못 봐 진단도 불가능했음.
+- **해결**: (1) `sharp` 추가. publish 직전에 PNG buffer 를 `sharp(pngBuf).flatten({ background: "#ffffff" }).jpeg({ quality: 90, mozjpeg: true, chromaSubsampling: "4:4:4" }).toBuffer()` 로 JPEG 변환. 업로드 경로/MIME 도 `.jpg` + `image/jpeg`. (2) `getContainerStatus` 가 `status_code,status` 둘 다 fetch 하도록 변경, `waitForFinished` 에러 메시지에 verbose status + container_id 같이 노출.
+- **규칙**: 외부 플랫폼에 이미지 올릴 때는 항상 **공식 지원 포맷** 확인. IG = JPEG, X = JPEG/PNG/WebP/GIF 등. `next/og` 결과를 외부에 그대로 보내지 말 것 — 항상 변환 한 단계 거치기. 폴링 기반 외부 API 는 처음부터 verbose status/error fields 같이 요청해서 진단 가능하게 설계.
+- **JPEG 변환 옵션 메모**: 카드뉴스처럼 텍스트 비중이 큰 이미지는 `chromaSubsampling: "4:4:4"` (기본 4:2:0 은 텍스트 가장자리 색번짐). `mozjpeg: true` 로 동일 화질 대비 파일 크기 축소.
+
 ---

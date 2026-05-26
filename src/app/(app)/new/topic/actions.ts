@@ -5,8 +5,18 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const schema = z.object({
-  topic: z.string().trim().min(2).max(200),
-  tone: z.enum(["informative", "emotional", "humorous", "sophisticated"]),
+  topic: z
+    .string()
+    .trim()
+    .min(2, { message: "토픽은 2자 이상 입력해주세요." })
+    .max(500, { message: "토픽은 500자 이하로 입력해주세요." }),
+  tone: z.enum([
+    "informative",
+    "issue",
+    "emotional",
+    "humorous",
+    "sophisticated",
+  ]),
   card_count: z
     .string()
     .transform((v) => Number(v))

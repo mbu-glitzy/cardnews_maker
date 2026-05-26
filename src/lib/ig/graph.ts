@@ -182,18 +182,26 @@ export async function createCarouselContainer(params: {
 
 /**
  * 컨테이너 상태 확인. FINISHED 가 되면 게시 가능.
+ * status_code: IN_PROGRESS | FINISHED | ERROR | EXPIRED | PUBLISHED
+ * status: 사람이 읽을 수 있는 verbose 상태 ("Finished" / "Error: <reason>" 등)
  */
 export async function getContainerStatus(
   containerId: string,
   pageAccessToken: string
-): Promise<string> {
+): Promise<{ statusCode: string; status: string | null }> {
   const u = new URL(`${GRAPH_BASE}/${containerId}`);
-  u.searchParams.set("fields", "status_code");
+  u.searchParams.set("fields", "status_code,status");
   u.searchParams.set("access_token", pageAccessToken);
   const res = await fetch(u.toString());
-  if (!res.ok) return "ERROR";
-  const data = (await res.json()) as { status_code?: string };
-  return data.status_code ?? "UNKNOWN";
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    return { statusCode: "ERROR", status: `상태 조회 실패 (${res.status}): ${text}` };
+  }
+  const data = (await res.json()) as { status_code?: string; status?: string };
+  return {
+    statusCode: data.status_code ?? "UNKNOWN",
+    status: data.status ?? null,
+  };
 }
 
 /**
@@ -307,10 +315,16 @@ async function waitForFinished(
   const start = Date.now();
 
   while (Date.now() - start < max) {
-    const status = await getContainerStatus(containerId, pageAccessToken);
-    if (status === "FINISHED") return;
-    if (status === "ERROR" || status === "EXPIRED") {
-      throw new Error(`컨테이너 처리 실패: ${status}`);
+    const { statusCode, status } = await getContainerStatus(
+      containerId,
+      pageAccessToken
+    );
+    if (statusCode === "FINISHED") return;
+    if (statusCode === "ERROR" || statusCode === "EXPIRED") {
+      const detail = status ? ` — ${status}` : "";
+      throw new Error(
+        `컨테이너 처리 실패: ${statusCode}${detail} (container_id=${containerId})`
+      );
     }
     await new Promise((r) => setTimeout(r, interval));
   }
